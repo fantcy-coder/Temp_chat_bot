@@ -1,0 +1,36 @@
+from chatbot_api.src.agents.course_rag_agent import course_rag_agent_executor
+from fastapi import FastAPI
+from chatbot_api.src.models.course_rag_query import CourseQueryInput, CourseQueryOutput
+from utils.async_utils import async_retry
+
+app = FastAPI(
+    title="Course Chatbot",
+    description="Endpoints for a course system graph RAG chatbot",
+)
+
+
+@async_retry(max_retries=10, delay=1)
+async def invoke_agent_with_retry(query: str):
+    """
+    Retry the agent if a tool fails to run. This can help when there
+    are intermittent connection issues to external APIs.
+    """
+
+    return await course_rag_agent_executor.ainvoke({"input": query})
+
+
+@app.get("/")
+async def get_status():
+    return {"status": "running"}
+
+
+@app.post("/course-rag-agent")
+async def query_course_agent(
+    query: CourseQueryInput,
+) -> CourseQueryOutput:
+    query_response = await invoke_agent_with_retry(query.text)
+    query_response["intermediate_steps"] = [
+        str(s) for s in query_response["intermediate_steps"]
+    ]
+
+    return query_response
